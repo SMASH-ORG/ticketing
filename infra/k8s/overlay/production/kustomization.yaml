@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./cert-manager-cluster-issuer.yaml
+  - ./namespace.yaml
+  - ../../base
+
+namespace: production
+
+images:
+  - name: auth
+    newName: smash1986/auth
+    newTag: latest
+  - name: client
+    newName: smash1986/client
+    newTag: latest
+  - name: tickets
+    newName: smash1986/tickets
+    newTag: latest
+  - name: orders
+    newName: smash1986/orders
+    newTag: latest
+  - name: payments
+    newName: smash1986/payments
+    newTag: latest
+
+patches:
+  - target:
+      kind: Ingress
+      name: ticketing
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: www.smash1986.xyz
+      - op: add
+        path: /spec/tls
+        value:
+          - hosts:
+              - www.smash1986.xyz
+            secretName: ticketing-tls
+      - op: add
+        path: /metadata/annotations
+        value:
+          cert-manager.io/cluster-issuer: "letsencrypt-production"
+
+configMapGenerator:
+  - name: replacement-config
+    options:
+      disableNameSuffixHash: true
+    literals:
+      - imagePullPolicy=Always
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: replacement-config
+      fieldPath: data.imagePullPolicy
+    targets:
+      - select:
+          kind: Deployment
+        options:
+          create: true
+        fieldPaths:
+          - spec.template.spec.containers.*.imagePullPolicy

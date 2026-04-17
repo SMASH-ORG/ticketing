@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./namespace.yaml
+  - ../../base
+
+namespace: development
+#images:
+#  - name: auth
+#    newName: us.gcr.io/microservices-k8s-408611/auth
+
+#patchesStrategicMerge:
+#  - patch.yaml
+
+
+patches:
+  - target:
+      group: networking.k8s.io
+      version: v1
+      kind: Ingress
+      name: ticketing
+    patch: |
+      - op: replace
+        path: /spec/rules/0/host
+        value: ticketing.smash1986.xyz
+
+configMapGenerator:
+  - name: replacement-config
+    options:
+      disableNameSuffixHash: true
+    literals:
+      - imagePullPolicy=Always
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: replacement-config
+      fieldPath: data.imagePullPolicy
+    targets:
+      - select:
+          kind: Deployment
+        options:
+          create: true
+        fieldPaths:
+          - spec.template.spec.containers.*.imagePullPolicy

@@ -1,0 +1,80 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ./namespace.yaml
+  - ../../base
+
+namespace: development
+
+#patchesStrategicMerge:
+#  - patch.yaml
+
+secretGenerator:
+  - name: jwt-secret
+    options:
+      disableNameSuffixHash: true
+    literals:
+      - JWT_KEY=smash
+  - name: stripe-secret
+    options:
+      disableNameSuffixHash: true
+
+
+configMapGenerator:
+  - name: replacement-config
+    options:
+      disableNameSuffixHash: true
+    literals:
+      - imagePullPolicyNever=Never
+      - imagePullPolicyAlways=Always
+      - imagePullPolicyIfNotPresent=IfNotPresent
+
+replacements:
+  - source:
+      kind: ConfigMap
+      name: replacement-config
+      fieldPath: data.imagePullPolicyNever
+    targets:
+      - select:
+          kind: Deployment
+        options:
+          create: true
+        fieldPaths:
+          - spec.template.spec.containers.*.imagePullPolicy
+  - source:
+      kind: ConfigMap
+      name: replacement-config
+      fieldPath: data.imagePullPolicyIfNotPresent
+    targets:
+      - select:
+          kind: Deployment
+          name: mongo
+        options:
+          create: true
+        fieldPaths:
+          - spec.template.spec.containers.*.imagePullPolicy
+
+
+patchesStrategicMerge:
+  - |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: orders
+    spec:
+      replicas: 1
+      template:
+        spec:
+          containers:
+            - name: orders
+              env:
+                - name: TICKET_EXPIRATION_WINDOW_SECONDS
+                  value: "60"
+  - |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: tickets
+    spec:
+      replicas: 1
+

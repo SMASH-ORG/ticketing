@@ -1,0 +1,53 @@
+name: deploy-manifests
+on:
+  push:
+    branches:
+      - main
+#    paths:
+#      - 'infra/k8s/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: DigitalOcean
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      - name: Deploy
+        run: |
+          doctl kubernetes cluster kubeconfig save ticketing
+          
+          # install ingress-nginx
+          helm upgrade --install ingress-nginx ingress-nginx \
+            --repo https://kubernetes.github.io/ingress-nginx \
+            --namespace ingress-nginx --create-namespace \
+            --set controller.ingressClassResource.default=true
+          kubectl wait --for=condition=available deployment/ingress-nginx-controller -n ingress-nginx --timeout=120s
+          
+          # install cert-manager
+          helm upgrade --install cert-manager cert-manager \
+            --repo https://charts.jetstack.io \
+            --namespace cert-manager --create-namespace \
+            --set installCRDs=true
+          kubectl wait --for=condition=available deployment/cert-manager-webhook -n cert-manager --timeout=120s
+          
+          # install external-dns
+          helm upgrade --install external-dns external-dns \
+              --repo https://charts.bitnami.com/bitnami \
+              --namespace external-dns --create-namespace \
+              --set provider=digitalocean \
+              --set digitalocean.apiToken=${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }} \
+              --set  policy=sync
+          kubectl wait --for=condition=available deployment/external-dns -n external-dns --timeout=120s
+          
+          kubectl apply -k infra/k8s/overlay/production
+          kubectl create secret generic jwt-secret  --dry-run=client \
+            --from-literal=JWT_KEY=$JWT_KEY -n production -o yaml | kubectl apply -f -
+          kubectl create secret generic stripe-secret  --dry-run=client \
+            --from-literal=STRIPE_KEY=$STRIPE_KEY -n production -o yaml | kubectl apply -f -
+        env:
+          JWT_KEY: ${{ secrets.JWT_KEY }}
+          STRIPE_KEY: ${{ secrets.STRIPE_KEY }}

@@ -1,0 +1,85 @@
+apiVersion: skaffold/v4beta8
+kind: Config
+metadata:
+  name: ticketing
+
+build:
+  #  googleCloudBuild:
+  #    projectId: microservices-k8s-408611
+  #  insecureRegistries:
+  #    - k3d-myregistry.smash:5000
+  #  local:
+  #    push: true
+
+  artifacts:
+    - image: auth
+      context: auth
+      docker:
+        dockerfile: Dockerfile
+      #        target: development
+      #        buildArgs:
+      #          REACT_APP_POST_SERVICE_URL: http://posts.blog.k8s
+      #          REACT_APP_COMMENT_SERVICE_URL: http://comments.blog.k8s
+      #          REACT_APP_QUERY_SERVICE_URL: http://query.blog.k8s
+      sync:
+        manual:
+          - src: "src/**/*.ts"
+            dest: .
+
+    - image: client
+      context: client
+      docker:
+        dockerfile: Dockerfile
+        target: development
+      sync:
+        manual:
+          - src: "**/*.js"
+            dest: .
+
+    - image: tickets
+      context: tickets
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*.ts"
+            dest: .
+
+    - image: orders
+      context: orders
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*.ts"
+            dest: .
+    - image: payments
+      context: payments
+      docker:
+        dockerfile: Dockerfile
+      sync:
+        manual:
+          - src: "src/**/*.ts"
+            dest: .
+
+
+manifests:
+  kustomize:
+    paths:
+      - infra/k8s/base
+profiles:
+  - name: remote
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/overlay/remote
+  - name: development
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/overlay/development
+  - name: production
+    manifests:
+      kustomize:
+        paths:
+          - infra/k8s/overlay/production
